@@ -2,12 +2,14 @@
 /**
  * Foundation v3 — MCP Server
  *
- * Minimal MCP server providing 5 core tools:
+ * Minimal MCP server providing 7 core tools:
  *   1. demerzel_search    — regex search across codebase snapshot
  *   2. demerzel_find_symbol — find where a symbol is exported
  *   3. demerzel_find_importers — find what files import a given module
  *   4. memory_save        — save to unified memory (Gaia + Open Brain)
  *   5. memory_search      — search unified memory
+ *   6. demerzel_execute   — run code/commands in a subprocess sandbox
+ *   7. demerzel_fetch     — fetch a URL and return clean text content
  *
  * Uses @modelcontextprotocol/sdk with StdioServerTransport.
  */
@@ -15,6 +17,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { spawn } from "node:child_process";
 
 // Demerzel — codebase intelligence (zero AI cost)
 import { regexSearch, findFiles, findSymbol, findImporters, getDeps, getContext } from './demerzel/search.mjs';
@@ -234,9 +237,210 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
+// Helper: smart truncate large output
+// ---------------------------------------------------------------------------
+function smartTruncate(text, maxBytes, headBytes, tailBytes) {
+  if (!text || text.length <= maxBytes) return { text, truncated: false, originalSize: text?.length || 0 };
+  const head = text.slice(0, headBytes);
+  const tail = text.slice(-tailBytes);
+  const skipped = text.length - headBytes - tailBytes;
+  return {
+    text: `${head}\n\n... [truncated ${skipped} bytes] ...\n\n${tail}`,
+    truncated: true,
+    originalSize: text.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tool 6: demerzel_execute — run code/commands in a subprocess sandbox
+// ---------------------------------------------------------------------------
+server.tool(
+  "demerzel_execute",
+  "Run code or shell commands in a subprocess sandbox. Captures stdout/stderr. Supports shell, javascript, and python.",
+  {
+    language: z.enum(["shell", "javascript", "python"]).describe("Language to execute: shell, javascript, or python"),
+    code: z.string().describe("The code or command to run"),
+    timeout: z.number().optional().default(30000).describe("Max execution time in milliseconds (default 30000)"),
+  },
+  async ({ language, code, timeout }) => {
+    try {
+      const cmds = {
+        shell: ["bash", ["-c", code]],
+        javascript: ["node", ["-e", code]],
+        python: ["python3", ["-c", code]],
+      };
+
+      const [cmd, args] = cmds[language];
+
+      const result = await new Promise((resolve) => {
+        let stdout = "";
+        let stderr = "";
+        let killed = false;
+
+        const proc = spawn(cmd, args, {
+          cwd: projectDir,
+          env: { ...process.env },
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+
+        const timer = setTimeout(() => {
+          killed = true;
+          proc.kill("SIGKILL");
+        }, timeout);
+
+        proc.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
+        proc.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+
+        proc.on("close", (exitCode) => {
+          clearTimeout(timer);
+          resolve({
+            stdout,
+            stderr,
+            exitCode: killed ? null : exitCode,
+            timedOut: killed,
+          });
+        });
+
+        proc.on("error", (err) => {
+          clearTimeout(timer);
+          resolve({
+            stdout,
+            stderr: stderr + `\nSpawn error: ${err.message}`,
+            exitCode: 1,
+            timedOut: false,
+          });
+        });
+      });
+
+      const MAX_BYTES = 10240; // 10KB
+      const HEAD = 2048;
+      const TAIL = 2048;
+      const outTrunc = smartTruncate(result.stdout, MAX_BYTES, HEAD, TAIL);
+      const errTrunc = smartTruncate(result.stderr, MAX_BYTES, HEAD, TAIL);
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            exitCode: result.exitCode,
+            timedOut: result.timedOut,
+            stdout: outTrunc.text,
+            stderr: errTrunc.text,
+            truncated: outTrunc.truncated || errTrunc.truncated,
+            originalSize: { stdout: outTrunc.originalSize, stderr: errTrunc.originalSize },
+          }, null, 2),
+        }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `Error executing ${language}: ${err.message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool 7: demerzel_fetch — fetch a URL and return clean text content
+// ---------------------------------------------------------------------------
+server.tool(
+  "demerzel_fetch",
+  "Fetch a URL and return clean text content. Strips HTML to readable text, pretty-prints JSON, passes through plain text.",
+  {
+    url: z.string().describe("URL to fetch"),
+    source: z.string().optional().describe("Label for the content source"),
+  },
+  async ({ url, source }) => {
+    try {
+      const response = await fetch(url, {
+        headers: { "User-Agent": "Foundation/3.0 (MCP Tool)" },
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!response.ok) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              error: true,
+              status: response.status,
+              statusText: response.statusText,
+              url,
+            }, null, 2),
+          }],
+          isError: true,
+        };
+      }
+
+      const contentType = response.headers.get("content-type") || "text/plain";
+      const raw = await response.text();
+      let content;
+
+      if (contentType.includes("json")) {
+        // Pretty-print JSON
+        try {
+          content = JSON.stringify(JSON.parse(raw), null, 2);
+        } catch {
+          content = raw;
+        }
+      } else if (contentType.includes("html")) {
+        // Strip HTML to clean text
+        content = raw
+          // Remove script, style, nav, header, footer blocks entirely
+          .replace(/<script[\s\S]*?<\/script>/gi, "")
+          .replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+          .replace(/<header[\s\S]*?<\/header>/gi, "")
+          .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+          // Remove all remaining HTML tags
+          .replace(/<[^>]+>/g, " ")
+          // Decode common HTML entities
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+          // Collapse whitespace
+          .replace(/[ \t]+/g, " ")
+          .replace(/\n\s*\n/g, "\n\n")
+          .trim();
+      } else {
+        content = raw;
+      }
+
+      const MAX_BYTES = 20480; // 20KB
+      const HEAD = 5120;
+      const TAIL = 5120;
+      const trunc = smartTruncate(content, MAX_BYTES, HEAD, TAIL);
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            url,
+            source: source || undefined,
+            contentType,
+            bytesFetched: raw.length,
+            truncated: trunc.truncated,
+            content: trunc.text,
+          }, null, 2),
+        }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `Error fetching ${url}: ${err.message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Start the server
 // ---------------------------------------------------------------------------
 const transport = new StdioServerTransport();
 await server.connect(transport);
 
-process.stderr.write(`[foundation] MCP server started with 5 tools: demerzel_search, demerzel_find_symbol, demerzel_find_importers, memory_save, memory_search\n`);
+process.stderr.write(`[foundation] MCP server started with 7 tools: demerzel_search, demerzel_find_symbol, demerzel_find_importers, memory_save, memory_search, demerzel_execute, demerzel_fetch\n`);
