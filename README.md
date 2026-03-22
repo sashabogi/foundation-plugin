@@ -10,7 +10,7 @@
 
 ## What is Foundation?
 
-Foundation is a **Claude Code plugin** that gives your AI assistant persistent memory, deep codebase understanding, and automatic session lifecycle management. It is not an MCP server that dumps hundreds of tool definitions into your context window. It is a plugin -- hooks fire on lifecycle events at zero token cost, skills load instructions only when you invoke them, and only 5 essential MCP tools are registered.
+Foundation is a **Claude Code plugin** that gives your AI assistant persistent memory, deep codebase understanding, and automatic session lifecycle management. It is not an MCP server that dumps hundreds of tool definitions into your context window. It is a plugin -- hooks fire on lifecycle events at zero token cost, skills load instructions only when you invoke them, and only 7 essential MCP tools are registered.
 
 The naming comes from Isaac Asimov's *Foundation* series. In the novels, Hari Seldon created the Foundation to preserve human knowledge through the collapse of the Galactic Empire -- a millennia-long dark age where everything would otherwise be forgotten. This plugin does the same thing for your development work: it preserves architectural decisions, codebase understanding, and project context across sessions, projects, and tools, so nothing is lost when a conversation ends or a context window resets.
 
@@ -18,7 +18,7 @@ Three core systems power the plugin:
 
 - **Demerzel** -- the codebase watcher. Named after R. Daneel Olivaw (who also went by Eto Demerzel), the 20,000-year-old robot who quietly guided humanity from the shadows. Demerzel builds structural snapshots of your codebase -- import graphs, export maps, symbol indexes -- so Claude can answer architecture questions without reading every file.
 - **Gaia** -- the local memory. Named after the planet with collective consciousness, where every organism shared a single mind. Gaia is a local SQLite + FTS5 database that connects sessions, projects, and insights through a unified knowledge graph with typed relationships.
-- **Seldon** -- the orchestrator (Foundation v2). Named after Hari Seldon, the mathematician who created psychohistory -- a science that could predict the future of civilizations through statistical laws of mass behavior. In Foundation v2, Seldon was the multi-agent orchestration system: 12 tools that routed tasks to different LLM providers (OpenAI, Google, Ollama, etc.), compared multiple agent perspectives on the same problem, ran adversarial critiques, created phased implementation plans, and verified results in automated fix loops. Seldon had 6 agent roles (orchestrator, critic, coder, reviewer, researcher, verifier) and could route each to different models based on cost and capability. **In v3, Seldon was retired** -- Claude Code's native Task tool and parallel agent capabilities now handle multi-agent orchestration better than a custom layer could. The multi-provider routing remains available through the `/foundation:providers` skill.
+- **Seldon** -- the orchestrator (Foundation v2, retired in v3). Named after Hari Seldon, the mathematician who created psychohistory. Seldon was the multi-agent orchestration system in Foundation v2. In v3, it was retired -- Claude Code's native Task tool and parallel agent capabilities handle this natively. The multi-provider routing remains available through the `/foundation:providers` skill.
 - **Open Brain** -- the cloud semantic memory. Built on the [OB1 (Open Brain)](https://github.com/NateBJones-Projects/OB1) architecture by Nate Jones, this optional layer adds pgvector-powered semantic search via Supabase, so you can find memories by *meaning*, not just keywords.
 
 ---
@@ -65,9 +65,11 @@ The snapshot captures: file paths, line counts, import/export relationships, sym
 | `demerzel_search` | FREE | Regex pattern search across the snapshot. Optionally filter by glob pattern. |
 | `demerzel_find_symbol` | FREE | Find the file where a symbol (function, class, type, variable) is exported. |
 | `demerzel_find_importers` | FREE | Find all files that import a given module. |
+| `demerzel_execute` | Truncated | Run shell, JavaScript, or Python in a subprocess sandbox. Output smart-truncated to 10KB. |
+| `demerzel_fetch` | Truncated | Fetch URLs with HTML-to-text stripping, JSON pretty-printing, and smart truncation (20KB limit). |
 | `/foundation:snapshot` | ~500 tokens | Generate a new codebase snapshot with import/export graphs and symbol index. |
 
-The search tools (`demerzel_search`, `demerzel_find_symbol`, `demerzel_find_importers`) are registered as MCP tools because they need to return structured data. The snapshot generation lives in a skill because it only needs to load instructions when invoked.
+The search tools (`demerzel_search`, `demerzel_find_symbol`, `demerzel_find_importers`) are registered as MCP tools because they need to return structured data. `demerzel_execute` and `demerzel_fetch` provide sandboxed code execution and web fetching with smart truncation to keep results within context limits. The snapshot generation lives in a skill because it only needs to load instructions when invoked.
 
 ---
 
@@ -116,41 +118,6 @@ When you search Gaia, results are ranked by a composite score with five weighted
 | Access frequency | 10% | `min(1.0, access_count / 10)` -- frequently retrieved memories rank higher |
 
 The FTS5 virtual table uses Porter stemming with Unicode61 tokenization, so searching "running" matches "run", "runs", and "runner".
-
-#### Gaia Schema
-
-```sql
-CREATE TABLE memories (
-  id TEXT PRIMARY KEY,
-  tier TEXT NOT NULL CHECK(tier IN ('session','project','global','note','observation')),
-  content TEXT NOT NULL,
-  tags TEXT NOT NULL,           -- JSON array
-  related_files TEXT NOT NULL,  -- JSON array
-  session_id TEXT,
-  project_path TEXT,
-  created_at INTEGER NOT NULL,
-  accessed_at INTEGER NOT NULL,
-  access_count INTEGER NOT NULL DEFAULT 0,
-  metadata TEXT                 -- JSON object
-);
-
-CREATE VIRTUAL TABLE memories_fts USING fts5(
-  content, tags, related_files,
-  content='memories',
-  content_rowid='rowid',
-  tokenize='porter unicode61'
-);
-
-CREATE TABLE memory_links (
-  from_memory_id TEXT NOT NULL,
-  to_memory_id TEXT NOT NULL,
-  link_type TEXT NOT NULL CHECK(link_type IN ('depends_on','extends','reverts','related','contradicts')),
-  created_at INTEGER NOT NULL,
-  PRIMARY KEY (from_memory_id, to_memory_id, link_type),
-  FOREIGN KEY (from_memory_id) REFERENCES memories(id) ON DELETE CASCADE,
-  FOREIGN KEY (to_memory_id) REFERENCES memories(id) ON DELETE CASCADE
-);
-```
 
 ---
 
@@ -344,7 +311,7 @@ foundation-plugin/
 │   │   ├── gaia.mjs             # Local SQLite + FTS5 storage, BM25 scoring, link graph
 │   │   ├── openbrain.mjs        # Cloud Supabase + pgvector client (JSON-RPC transport)
 │   │   └── unified.mjs          # Dual-write coordinator, search merger, deduplication
-│   └── server.mjs               # MCP server: 5 tools via @modelcontextprotocol/sdk
+│   └── server.mjs               # MCP server: 7 tools via @modelcontextprotocol/sdk
 ├── assets/
 │   ├── banner.jpg               # README banner image
 │   ├── ui-analysis.png          # Dashboard analysis view screenshot
@@ -360,7 +327,7 @@ foundation-plugin/
 Foundation v3 solves this with the Claude Code plugin architecture:
 - **Hooks** fire on lifecycle events and cost zero tokens until triggered
 - **Skills** are slash commands that load instructions only when invoked
-- **Only 5 MCP tools** remain (the ones that must return structured data to Claude)
+- **Only 7 MCP tools** remain (the ones that must return structured data to Claude)
 
 ---
 
@@ -370,21 +337,21 @@ Foundation v2 was a monolithic MCP server with 37 tools across three subsystems 
 
 | What Changed | v2 | v3 |
 |-------------|----|----|
-| Architecture | MCP server (37 tools) | Plugin (5 tools + 7 skills + 4 hooks) |
+| Architecture | MCP server (37 tools) | Plugin (7 tools + 7 skills + 4 hooks) |
 | Context cost at idle | ~13,000 tokens | ~0 tokens (tools load on demand) |
-| Demerzel (codebase) | 9 MCP tools | 3 MCP tools + 1 skill |
+| Demerzel (codebase) | 9 MCP tools | 5 MCP tools + 1 skill |
 | Gaia (memory) | 16 MCP tools | 2 MCP tools + 4 skills |
-| Seldon (multi-agent) | 12 MCP tools | Removed -- replaced by Claude Code's native Task tool |
+| Seldon (multi-agent) | 12 MCP tools | Retired -- Claude Code's native Task tool handles this |
 | Session lifecycle | Manual | Automatic via hooks |
 | Cloud memory | Not included | Open Brain integrated (from OB1) |
 
 **What was kept:** Demerzel's codebase intelligence, Gaia's local memory with FTS5, the multi-project web dashboard.
 
-**What was merged in:** Open Brain cloud semantic memory, adapted from [OB1](https://github.com/NateBJones-Projects/OB1)'s Supabase + pgvector architecture.
+**What was added:** Sandboxed code execution (`demerzel_execute`) and URL fetching (`demerzel_fetch`) with smart truncation, absorbed from Context-Mode's core feature set. Open Brain cloud semantic memory, adapted from [OB1](https://github.com/NateBJones-Projects/OB1)'s Supabase + pgvector architecture.
 
-**What was trimmed:** Seldon's 12 multi-agent orchestration tools (`seldon_invoke`, `seldon_compare`, `seldon_critique`, `seldon_review`, `seldon_plan`, `seldon_phase_create`, `seldon_phase_list`, `seldon_verify`, `seldon_fix`, `seldon_execute_verified`, `seldon_providers_list`, `seldon_providers_test`). Seldon routed tasks to 6 agent roles (orchestrator, critic, coder, reviewer, researcher, verifier) across multiple LLM providers, ran adversarial reviews, built phased implementation plans, and executed verification loops. Claude Code now handles all of this natively -- the Task tool dispatches subagents, parallel agent teams run concurrent work, and the model itself handles planning and critique. Keeping Seldon would have meant maintaining 12 tools that duplicate what Claude Code does out of the box. The multi-provider configuration (`~/.foundation/config.yaml`) still exists for use through the `/foundation:providers` skill.
+**What was retired:** Seldon's multi-agent orchestration. Claude Code now handles this natively -- the Task tool dispatches subagents, parallel agents run concurrent work, and the model itself handles planning and critique. The multi-provider configuration still exists via the `/foundation:providers` skill.
 
-**Net result:** 37 MCP tools reduced to 5, with the same feature set delivered through skills and hooks. Approximately 10,000+ tokens freed per session.
+**Net result:** 37 MCP tools reduced to 7, with the same feature set delivered through skills and hooks. Approximately 10,000+ tokens freed per session.
 
 ---
 
@@ -402,7 +369,7 @@ Foundation v2 was a monolithic MCP server with 37 tools across three subsystems 
 
 - **Isaac Asimov's Foundation series** for the naming, philosophy, and the idea that knowledge can be preserved through chaos if you build the right systems.
 - **[OB1 (Open Brain)](https://github.com/NateBJones-Projects/OB1)** by Nate Jones -- the semantic memory architecture that Foundation's cloud layer is built on. The Supabase Edge Function pattern, pgvector embeddings, and auto-metadata extraction approach all originate from OB1.
-- **[Context-Mode](https://github.com/mksglu/context-mode)** by mksglu -- the plugin architecture pattern (plugin.json, hooks, SKILL.md) that Foundation v3 follows. Context-Mode proved that plugins with hooks are far more efficient than MCP servers for AI-assisted development.
+- **[Context-Mode](https://github.com/mksglu/context-mode)** by mksglu -- the plugin architecture pattern (plugin.json, hooks, SKILL.md) that Foundation v3 follows, and the source of the `demerzel_execute` and `demerzel_fetch` tools. Context-Mode's core execution and fetching capabilities were absorbed into Foundation v3 as native Demerzel tools.
 - **Claude Code team** at Anthropic for the plugin system, hook lifecycle, and skill architecture that makes this approach possible.
 
 ---
