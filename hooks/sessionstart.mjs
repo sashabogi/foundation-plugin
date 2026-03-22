@@ -10,9 +10,43 @@
  * Debug logging goes to stderr (never stdout).
  */
 
-import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { search as gaiaSearch, getRecent as gaiaGetRecent, closeStorage } from "../src/memory/gaia.mjs";
+
+// --- Project registration (keeps ~/.foundation/projects.json in sync for UI) ---
+const CONFIG_DIR = join(homedir(), '.foundation');
+const PROJECTS_FILE = join(CONFIG_DIR, 'projects.json');
+
+function loadProjects() {
+  try {
+    if (existsSync(PROJECTS_FILE)) {
+      return JSON.parse(readFileSync(PROJECTS_FILE, 'utf-8'));
+    }
+  } catch { }
+  return [];
+}
+
+function saveProjects(projects) {
+  if (!existsSync(CONFIG_DIR)) {
+    mkdirSync(CONFIG_DIR, { recursive: true });
+  }
+  writeFileSync(PROJECTS_FILE, JSON.stringify(projects, null, 2));
+}
+
+function registerProject(projectPath) {
+  const projects = loadProjects();
+  const name = projectPath.split('/').pop() || 'unknown';
+  const existing = projects.findIndex(p => p.path === projectPath);
+  if (existing >= 0) {
+    projects[existing].lastUsed = Date.now();
+  } else {
+    projects.push({ path: projectPath, name, lastUsed: Date.now() });
+  }
+  projects.sort((a, b) => b.lastUsed - a.lastUsed);
+  saveProjects(projects.slice(0, 20));
+}
 
 /**
  * Read all of stdin as a string.
@@ -37,6 +71,13 @@ try {
   const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
   process.stderr.write(`[foundation] SessionStart source=${source} project=${projectDir}\n`);
+
+  // Register project in ~/.foundation/projects.json for UI discovery
+  try {
+    registerProject(projectDir);
+  } catch (err) {
+    process.stderr.write(`[foundation] Project registration failed: ${err?.message}\n`);
+  }
 
   // Check for .foundation/snapshot.txt in project directory
   const snapshotPath = join(projectDir, ".foundation", "snapshot.txt");
