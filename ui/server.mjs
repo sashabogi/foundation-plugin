@@ -238,13 +238,17 @@ async function handleOpenBrainSearch(req, res) {
       return;
     }
 
-    const response = await fetch(obUrl, {
+    const response = await fetch(`${obUrl}?key=${obKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-auth-key': obKey,
       },
-      body: JSON.stringify({ action: 'search', query, match_count: limit }),
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'tools/call',
+        params: { name: 'search_thoughts', arguments: { query, limit } },
+      }),
     });
 
     const data = await response.json();
