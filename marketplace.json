@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "foundation": {
+      "name": "foundation",
+      "version": "3.0.0",
+      "description": "Codebase intelligence, semantic memory, and multi-provider routing for Claude Code",
+      "path": "."
+    }
+  }
+}

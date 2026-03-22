@@ -1,0 +1,16 @@
+{
+  "name": "foundation",
+  "version": "3.0.0",
+  "description": "Unified codebase intelligence, semantic memory, and multi-provider LLM routing",
+  "mcpServers": {
+    "foundation": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/start.mjs"],
+      "env": {
+        "OPEN_BRAIN_URL": "${OPEN_BRAIN_URL}",
+        "OPEN_BRAIN_KEY": "${OPEN_BRAIN_KEY}"
+      }
+    }
+  },
+  "skills": "./skills/"
+}

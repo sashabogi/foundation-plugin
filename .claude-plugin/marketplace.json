@@ -1,0 +1,35 @@
+{
+  "name": "foundation-plugin",
+  "owner": {
+    "name": "Sasha Bogojevic",
+    "email": "sashabogi@gmail.com"
+  },
+  "metadata": {
+    "description": "Codebase intelligence, semantic memory, and multi-provider routing for Claude Code",
+    "version": "3.0.0"
+  },
+  "plugins": [
+    {
+      "name": "foundation",
+      "source": "./",
+      "description": "Codebase intelligence and semantic memory for Claude Code — zero context cost. Inspired by Asimov's Foundation universe.",
+      "version": "3.0.0",
+      "author": {
+        "name": "Sasha Bogojevic"
+      },
+      "category": "development",
+      "keywords": [
+        "codebase-intelligence",
+        "semantic-memory",
+        "pgvector",
+        "sqlite",
+        "fts5",
+        "demerzel",
+        "gaia",
+        "supabase",
+        "hooks",
+        "skills"
+      ]
+    }
+  ]
+}
