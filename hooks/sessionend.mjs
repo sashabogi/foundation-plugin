@@ -79,13 +79,6 @@ try {
   process.stderr.write(`[foundation] SessionEnd error: ${err?.message || err}\n`);
 }
 
-// Output hook response
-console.log(JSON.stringify({
-  hookSpecificOutput: {
-    hookEventName: "SessionEnd",
-  },
-}));
-
-// Close Gaia storage and exit cleanly
+// SessionEnd has no valid hookSpecificOutput variant — exit cleanly
 closeStorage();
 process.exit(0);
