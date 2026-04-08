@@ -1,14 +1,10 @@
 {
   "name": "@sashabogi/foundation-plugin",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "type": "module",
   "private": true,
-  "description": "Unified codebase intelligence, semantic memory, and multi-provider LLM routing for Claude Code",
-  "license": "MIT",
+  "description": "Claude Code plugin wrapper for @sashabogi/foundation",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
-    "@supabase/supabase-js": "^2.49.4",
-    "better-sqlite3": "^11.8.1",
-    "zod": "^3.24.4"
+    "@sashabogi/foundation": "^3.0.1"
   }
 }

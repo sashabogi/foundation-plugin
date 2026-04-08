@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Codebase intelligence, semantic memory, and multi-provider routing for Claude Code",
-    "version": "3.0.0"
+    "version": "3.0.1"
   },
   "plugins": [
     {
       "name": "foundation",
       "source": "./",
       "description": "Codebase intelligence and semantic memory for Claude Code — zero context cost. Inspired by Asimov's Foundation universe.",
-      "version": "3.0.0",
+      "version": "3.0.1",
       "author": {
         "name": "Sasha Bogojevic"
       },

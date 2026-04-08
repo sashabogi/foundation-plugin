@@ -1,6 +1,6 @@
 {
   "name": "foundation",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Unified codebase intelligence, semantic memory, and multi-provider LLM routing",
   "mcpServers": {
     "foundation": {
