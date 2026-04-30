@@ -10,7 +10,7 @@
 
 ## What is Foundation?
 
-Foundation is a **Claude Code plugin** that gives your AI assistant persistent memory, deep codebase understanding, and automatic session lifecycle management. It is not an MCP server that dumps hundreds of tool definitions into your context window. It is a plugin -- hooks fire on lifecycle events at zero token cost, skills load instructions only when you invoke them, and only 7 essential MCP tools are registered.
+Foundation is a **Claude Code plugin** that wraps the [`@sashabogi/foundation`](https://www.npmjs.com/package/@sashabogi/foundation) npm package and gives your AI assistant persistent memory, deep codebase understanding, and automatic session lifecycle management. The plugin itself is a thin shell: it contributes hooks that fire on lifecycle events at zero token cost, skills that load instructions only when you invoke them, a local UI server, and a stable adapter to the bundled MCP server. The MCP server (shipped by the npm package) registers 39 tools across Demerzel, Seldon, and Gaia. In Claude Code 2.1+ those tools are loaded on demand via the deferred-tool system, so they cost no context until you call them.
 
 The naming comes from Isaac Asimov's *Foundation* series. In the novels, Hari Seldon created the Foundation to preserve human knowledge through the collapse of the Galactic Empire -- a millennia-long dark age where everything would otherwise be forgotten. This plugin does the same thing for your development work: it preserves architectural decisions, codebase understanding, and project context across sessions, projects, and tools, so nothing is lost when a conversation ends or a context window resets.
 
@@ -18,7 +18,7 @@ Three core systems power the plugin:
 
 - **Demerzel** -- the codebase watcher. Named after R. Daneel Olivaw (who also went by Eto Demerzel), the 20,000-year-old robot who quietly guided humanity from the shadows. Demerzel builds structural snapshots of your codebase -- import graphs, export maps, symbol indexes -- so Claude can answer architecture questions without reading every file.
 - **Gaia** -- the local memory. Named after the planet with collective consciousness, where every organism shared a single mind. Gaia is a local SQLite + FTS5 database that connects sessions, projects, and insights through a unified knowledge graph with typed relationships.
-- **Seldon** -- the orchestrator (Foundation v2, retired in v3). Named after Hari Seldon, the mathematician who created psychohistory. Seldon was the multi-agent orchestration system in Foundation v2. In v3, it was retired -- Claude Code's native Task tool and parallel agent capabilities handle this natively. The multi-provider routing remains available through the `/foundation:providers` skill.
+- **Seldon** -- the orchestrator. Named after Hari Seldon, the mathematician who created psychohistory. Seldon provides multi-agent orchestration: role-based invocation (coder, critic, reviewer), plan generation, critique, verification loops, and multi-provider LLM routing. Claude Code's native Task tool also handles parallel agents -- use Seldon when you want explicit role-based prompting, structured plans, or external provider routing. The configured providers are exposed through the `/foundation:providers` skill.
 - **Open Brain** -- the cloud semantic memory. Built on the [OB1 (Open Brain)](https://github.com/NateBJones-Projects/OB1) architecture by Nate Jones, this optional layer adds pgvector-powered semantic search via Supabase, so you can find memories by *meaning*, not just keywords.
 
 ---
@@ -63,13 +63,16 @@ The snapshot captures: file paths, line counts, import/export relationships, sym
 | Tool | Context Cost | What It Does |
 |------|-------------|--------------|
 | `demerzel_search` | FREE | Regex pattern search across the snapshot. Optionally filter by glob pattern. |
+| `demerzel_find_files` | FREE | Glob pattern search for files in the snapshot. |
 | `demerzel_find_symbol` | FREE | Find the file where a symbol (function, class, type, variable) is exported. |
 | `demerzel_find_importers` | FREE | Find all files that import a given module. |
-| `demerzel_execute` | Truncated | Run shell, JavaScript, or Python in a subprocess sandbox. Output smart-truncated to 10KB. |
-| `demerzel_fetch` | Truncated | Fetch URLs with HTML-to-text stripping, JSON pretty-printing, and smart truncation (20KB limit). |
-| `/foundation:snapshot` | ~500 tokens | Generate a new codebase snapshot with import/export graphs and symbol index. |
+| `demerzel_get_deps` | FREE | List the imports declared by a given file. |
+| `demerzel_get_context` | FREE | Read code around a symbol or location directly out of the snapshot. |
+| `demerzel_analyze` | ~500 tokens | AI-powered architecture analysis using the Recursive Language Model engine. |
+| `demerzel_semantic_search` | Tokens vary | Natural-language semantic search over the codebase. |
+| `demerzel_snapshot` / `/foundation:snapshot` | ~500 tokens | Generate a new codebase snapshot with import/export graphs and symbol index. |
 
-The search tools (`demerzel_search`, `demerzel_find_symbol`, `demerzel_find_importers`) are registered as MCP tools because they need to return structured data. `demerzel_execute` and `demerzel_fetch` provide sandboxed code execution and web fetching with smart truncation to keep results within context limits. The snapshot generation lives in a skill because it only needs to load instructions when invoked.
+The free reads (`demerzel_search`, `demerzel_find_files`, `demerzel_find_symbol`, `demerzel_find_importers`, `demerzel_get_deps`, `demerzel_get_context`) operate against `.foundation/snapshot.txt` and cost zero tokens beyond the results themselves -- they should be your first stop before opening files. `demerzel_analyze` and `demerzel_semantic_search` involve LLM calls and cost tokens. Snapshot generation is also exposed as the `/foundation:snapshot` slash command so it can load its instructions on demand.
 
 ---
 
@@ -144,7 +147,7 @@ Open Brain communicates with the Supabase Edge Function using JSON-RPC over HTTP
 
 ### Unified Memory Layer
 
-Every memory operation goes through the unified memory interface (`src/memory/unified.mjs`), which coordinates both backends:
+Every memory operation goes through the unified memory layer in `@sashabogi/foundation`, which coordinates both backends:
 
 **Dual-write on save:**
 1. Gaia receives the memory synchronously (local SQLite, always succeeds)
@@ -182,12 +185,12 @@ Hooks fire automatically on Claude Code lifecycle events. The user never invokes
 
 | Hook | When It Fires | What It Does |
 |------|--------------|-------------|
-| **SessionStart** | When a Claude Code session begins | Checks for `.foundation/snapshot.txt` in the project directory. If found, injects a system reminder telling Claude that Demerzel tools are available for codebase queries, avoiding unnecessary file reads. |
+| **SessionStart** | When a Claude Code session begins | (1) Registers the project in `~/.foundation/projects.json` so the Foundation UI can discover it. (2) If `.foundation/snapshot.txt` exists, injects a `<foundation-context>` reminder that the Demerzel snapshot is available so Claude prefers Foundation queries over raw file reads. (3) Surfaces up to 5 recent Gaia memories (project + global tiers) inside `<foundation-memories>`. (4) Runs a cross-project keyword search using the cwd basename as an FTS5 phrase-quoted query (so hyphenated names like `stripe-auth` match literally) and surfaces up to 3 hits from other projects inside `<foundation-cross-project>`. (5) If `.foundation/handoffs/*.md` is present, loads the latest handoff document into `<foundation-handoff>`. |
 | **PreToolUse** | Before any tool call | Intercepts tool invocations. Can inject additional context, suggest Foundation tools when Claude is about to read many files, and route queries through Demerzel when appropriate. |
-| **PostToolUse** | After any tool call completes | Observes tool results. Can auto-capture architectural decisions, track file changes for session checkpoints, and detect repeated patterns that suggest optimization opportunities. |
-| **SessionEnd** | When a Claude Code session ends | Auto-checkpoints session state to Gaia -- decisions made, files changed, tasks in progress -- so the next session can pick up where this one left off. |
+| **PostToolUse** | After any tool call completes | Appends a JSON line per tool invocation to a per-session log at `/tmp/foundation-session-<ppid>.jsonl`. SessionEnd consumes that log to summarize the session. |
+| **SessionEnd** | When a Claude Code session ends | Reads the per-session JSONL log written by PostToolUse, summarizes the session (duration, tools used, files touched), saves a `session`-tier checkpoint to Gaia tagged `[checkpoint, auto]`, and deletes the temp log. |
 
-All hooks read JSON from stdin, write debug logs to stderr, and output `hookSpecificOutput` JSON to stdout. They are designed to execute in under 20ms with no network calls and no LLM invocations.
+All hooks read JSON from stdin, write debug logs to stderr, and output `hookSpecificOutput` JSON to stdout. They run with no network calls and no LLM invocations -- typically under 100ms; SessionStart can be a touch slower because the cross-project search hits SQLite FTS5.
 
 ---
 
@@ -287,12 +290,13 @@ Add these to your shell profile (`~/.zshrc`, `~/.bashrc`) or Claude Code's envir
 ```
 foundation-plugin/
 ├── .claude-plugin/
-│   └── plugin.json              # Plugin manifest: name, version, MCP server config, skills path
+│   ├── plugin.json              # Plugin manifest: name, version, MCP server entry, skills path
+│   └── hooks/hooks.json         # Hook registration: SessionStart, SessionEnd, Pre/PostToolUse
 ├── hooks/
-│   ├── sessionstart.mjs         # Loads snapshot context on session start
+│   ├── sessionstart.mjs         # Project registration, snapshot pointer, recent + cross-project Gaia memories, latest handoff
 │   ├── pretooluse.mjs           # Intercepts tool calls for context injection
-│   ├── posttooluse.mjs          # Observes results for auto-capture
-│   └── sessionend.mjs           # Checkpoints session state on exit
+│   ├── posttooluse.mjs          # Appends per-session JSONL log of tool events
+│   └── sessionend.mjs           # Reads the JSONL log, saves a session-tier checkpoint to Gaia
 ├── skills/
 │   ├── snapshot/SKILL.md        # /foundation:snapshot
 │   ├── remember/SKILL.md        # /foundation:remember
@@ -302,56 +306,43 @@ foundation-plugin/
 │   ├── brain-stats/SKILL.md     # /foundation:brain-stats
 │   └── foundation-ui/SKILL.md   # /foundation:foundation-ui
 ├── src/
-│   ├── demerzel/
-│   │   ├── index.mjs            # Demerzel public API (re-exports)
-│   │   ├── search.mjs           # Regex search, symbol lookup, import graph queries
-│   │   ├── snapshot.mjs         # Snapshot generator: file walker, import/export parser, graph builder
-│   │   └── analyze.mjs          # AI-powered analysis using RLM engine and Nucleus DSL
-│   ├── memory/
-│   │   ├── gaia.mjs             # Local SQLite + FTS5 storage, BM25 scoring, link graph
-│   │   ├── openbrain.mjs        # Cloud Supabase + pgvector client (JSON-RPC transport)
-│   │   └── unified.mjs          # Dual-write coordinator, search merger, deduplication
-│   └── server.mjs               # MCP server: 7 tools via @modelcontextprotocol/sdk
-├── assets/
-│   ├── banner.jpg               # README banner image
-│   ├── ui-analysis.png          # Dashboard analysis view screenshot
-│   ├── ui-graph.png             # Dashboard dependency graph screenshot
-│   └── ...                      # Additional UI screenshots
-├── start.mjs                    # Entry point: dependency check, graceful shutdown, server boot
-├── package.json                 # Dependencies: better-sqlite3, @modelcontextprotocol/sdk, zod
-└── marketplace.json             # Plugin marketplace metadata
+│   └── memory/gaia.mjs          # Stable adapter: re-exports save/search/getRecent/closeStorage from @sashabogi/foundation for the hooks
+├── ui/
+│   └── server.mjs               # Local Foundation dashboard server (http://localhost:3333)
+├── assets/                      # README + dashboard screenshots
+├── start.mjs                    # MCP bootstrap: ensures @sashabogi/foundation is installed, then delegates to its startServer()
+├── marketplace.json             # Plugin marketplace metadata
+└── package.json                 # Single runtime dependency: @sashabogi/foundation (transitively pulls better-sqlite3, MCP SDK, etc.)
 ```
 
-**Why a plugin instead of an MCP server?** Traditional MCP servers register all their tools at connection time. Every tool description is loaded into the context window of every session, whether you use it or not. Foundation v2 had 37 tools -- that's roughly 13,000 tokens consumed just by tool definitions sitting in context. Multiply that across multiple MCP servers and you're burning 50-75K tokens before the conversation even starts.
+**Thin-wrapper model.** All MCP tool implementations, the Demerzel snapshot engine, the Gaia/Open Brain unified memory layer, and the provider routing live in the [`@sashabogi/foundation`](https://www.npmjs.com/package/@sashabogi/foundation) npm package. The plugin's job is to contribute the Claude Code-specific surface: hooks that observe the session, skills that expose slash commands, the local UI server, and a thin adapter (`src/memory/gaia.mjs`) so the hooks can talk to Gaia using the same storage the MCP server uses.
 
-Foundation v3 solves this with the Claude Code plugin architecture:
-- **Hooks** fire on lifecycle events and cost zero tokens until triggered
-- **Skills** are slash commands that load instructions only when invoked
-- **Only 7 MCP tools** remain (the ones that must return structured data to Claude)
+**Why a plugin instead of a bare MCP server?** Hooks and skills are Claude Code primitives: hooks fire on lifecycle events at zero token cost, and skills load instructions only when their slash command is invoked. Wrapping the MCP server as a plugin means we can layer those primitives on top of the same tool set without touching the npm package, and -- with Claude Code 2.1+ deferred tool loading -- the 39 MCP tools cost no context until they're actually called.
 
 ---
 
 ## From Foundation v2 to v3
 
-Foundation v2 was a monolithic MCP server with 37 tools across three subsystems (Demerzel, Gaia, Seldon). Foundation v3 is a plugin that achieves the same capabilities with dramatically lower context cost.
+Foundation v2 was a monolithic MCP server with 37 tools across three subsystems (Demerzel, Gaia, Seldon). Foundation v3 is a Claude Code plugin that wraps the same MCP server (now published as `@sashabogi/foundation` on npm) and layers hooks, skills, and a UI on top.
 
-| What Changed | v2 | v3 |
+| What Changed | v2 | v3 (3.0.1) |
 |-------------|----|----|
-| Architecture | MCP server (37 tools) | Plugin (7 tools + 7 skills + 4 hooks) |
-| Context cost at idle | ~13,000 tokens | ~0 tokens (tools load on demand) |
-| Demerzel (codebase) | 9 MCP tools | 5 MCP tools + 1 skill |
-| Gaia (memory) | 16 MCP tools | 2 MCP tools + 4 skills |
-| Seldon (multi-agent) | 12 MCP tools | Retired -- Claude Code's native Task tool handles this |
-| Session lifecycle | Manual | Automatic via hooks |
-| Cloud memory | Not included | Open Brain integrated (from OB1) |
+| Architecture | Monolithic MCP server (37 tools, in-tree) | Plugin (thin wrapper of `@sashabogi/foundation` npm package) + 7 skills + 4 hooks |
+| Tool delivery | Always loaded into context | On-demand via Claude Code 2.1+ deferred tool loading |
+| Demerzel (codebase) | 9 MCP tools | 9 MCP tools (snapshot/search/find_files/find_importers/find_symbol/get_deps/get_context/analyze/semantic_search) + `/foundation:snapshot` skill |
+| Gaia (memory) | 16 MCP tools | 18 MCP tools + 4 skills (added `gaia_ingest_transcripts`, `gaia_invalidate`) |
+| Seldon (multi-agent) | 12 MCP tools | 12 MCP tools (still shipped) + `/foundation:providers` skill |
+| Session lifecycle | Manual | Automatic via SessionStart, SessionEnd, Pre/PostToolUse hooks |
+| Cross-project recall | Not included | Cross-project FTS5 keyword search injected by SessionStart |
+| Cloud memory | Not included | Open Brain integrated (adapted from OB1) |
 
-**What was kept:** Demerzel's codebase intelligence, Gaia's local memory with FTS5, the multi-project web dashboard.
+**What was kept:** Demerzel's codebase intelligence, Gaia's local memory with FTS5, Seldon's multi-agent orchestration and provider routing, the multi-project web dashboard.
 
-**What was added:** Sandboxed code execution (`demerzel_execute`) and URL fetching (`demerzel_fetch`) with smart truncation, absorbed from Context-Mode's core feature set. Open Brain cloud semantic memory, adapted from [OB1](https://github.com/NateBJones-Projects/OB1)'s Supabase + pgvector architecture.
+**What was added:** Open Brain cloud semantic memory, adapted from [OB1](https://github.com/NateBJones-Projects/OB1)'s Supabase + pgvector architecture. Automatic session lifecycle via hooks. Cross-project keyword recall on SessionStart. Transcript ingestion (`gaia_ingest_transcripts`) and a temporal knowledge graph in Gaia.
 
-**What was retired:** Seldon's multi-agent orchestration. Claude Code now handles this natively -- the Task tool dispatches subagents, parallel agents run concurrent work, and the model itself handles planning and critique. The multi-provider configuration still exists via the `/foundation:providers` skill.
+**What was reorganized:** In 3.0.1 the plugin was split from a monolithic in-tree implementation into a thin wrapper. The MCP server, Demerzel engine, Gaia storage, Open Brain client, and Seldon orchestrator now live in the [`@sashabogi/foundation`](https://www.npmjs.com/package/@sashabogi/foundation) npm package. The plugin only owns hooks, skills, the UI server, and a small adapter (`src/memory/gaia.mjs`) so the hooks share storage with the MCP server.
 
-**Net result:** 37 MCP tools reduced to 7, with the same feature set delivered through skills and hooks. Approximately 10,000+ tokens freed per session.
+**Net result:** Same 39-tool feature surface as the unified npm package, delivered through Claude Code plugin primitives that cost zero context until invoked. Hooks add automatic session lifecycle on top.
 
 ---
 
@@ -369,7 +360,7 @@ Foundation v2 was a monolithic MCP server with 37 tools across three subsystems 
 
 - **Isaac Asimov's Foundation series** for the naming, philosophy, and the idea that knowledge can be preserved through chaos if you build the right systems.
 - **[OB1 (Open Brain)](https://github.com/NateBJones-Projects/OB1)** by Nate Jones -- the semantic memory architecture that Foundation's cloud layer is built on. The Supabase Edge Function pattern, pgvector embeddings, and auto-metadata extraction approach all originate from OB1.
-- **[Context-Mode](https://github.com/mksglu/context-mode)** by mksglu -- the plugin architecture pattern (plugin.json, hooks, SKILL.md) that Foundation v3 follows, and the source of the `demerzel_execute` and `demerzel_fetch` tools. Context-Mode's core execution and fetching capabilities were absorbed into Foundation v3 as native Demerzel tools.
+- **[Context-Mode](https://github.com/mksglu/context-mode)** by mksglu -- the plugin architecture pattern (plugin.json, hooks, SKILL.md) that Foundation v3 follows. Foundation's hook + skill layout is directly modeled on Context-Mode's example.
 - **Claude Code team** at Anthropic for the plugin system, hook lifecycle, and skill architecture that makes this approach possible.
 
 ---
