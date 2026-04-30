@@ -115,6 +115,39 @@ try {
     process.stderr.write(`[foundation] Gaia search failed: ${err?.message}\n`);
   }
 
+  // Cross-project keyword search: surface memories from OTHER projects whose
+  // content matches the current project's name. Helps when starting fresh in
+  // a project that was previously discussed elsewhere.
+  try {
+    const basename = projectDir.split('/').filter(Boolean).pop() || '';
+    if (basename && basename.length >= 3) {
+      // FTS5 treats "-" and similar punctuation as operators (e.g. "stripe-auth"
+      // would parse as column:auth). Quote as a phrase so the basename matches
+      // literally regardless of internal punctuation.
+      const ftsQuery = `"${basename.replace(/"/g, '')}"`;
+      const hits = gaiaSearch({
+        query: ftsQuery,
+        tiers: ['project', 'global'],
+        limit: 10,
+      });
+      const crossProject = hits.filter(r =>
+        r.memory.project_path && r.memory.project_path !== projectDir
+      ).slice(0, 3);
+      if (crossProject.length > 0) {
+        additionalContext += `<foundation-cross-project query="${basename}" count="${crossProject.length}">\n`;
+        additionalContext += `Memories from other projects matching "${basename}".\n`;
+        for (const r of crossProject) {
+          const snippet = r.memory.content.substring(0, 180);
+          const proj = r.memory.project_path.split('/').filter(Boolean).pop() || 'unknown';
+          additionalContext += `- [${proj}] ${snippet}${r.memory.content.length > 180 ? '...' : ''}\n`;
+        }
+        additionalContext += `</foundation-cross-project>\n`;
+      }
+    }
+  } catch (err) {
+    process.stderr.write(`[foundation] Cross-project search failed: ${err?.message}\n`);
+  }
+
   // Check for handoff documents
   const handoffDir = join(projectDir, '.foundation', 'handoffs');
   if (existsSync(handoffDir)) {
