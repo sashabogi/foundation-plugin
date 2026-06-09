@@ -1,14 +1,14 @@
 ---
 name: doc-portal
 description: |
-  Pelorat — generate a browsable HTML documentation portal from a project's markdown docs.
+  Seldon — generate a browsable HTML documentation portal from a project's markdown docs.
   Markdown stays the source of truth; the portal is generated (never hand-maintained), styled
   with the project's design system, and served locally. Run after /foundation:doc-restructure.
   Trigger: /foundation:doc-portal
 user-invocable: true
 ---
 
-# Pelorat — Documentation Portal (generated HTML)
+# Seldon — Documentation Portal (generated HTML)
 
 The third phase: a human-readable portal so a sprawling project becomes legible at a glance. **The one
 rule:** markdown is the single source of truth; the HTML is *generated* from it — never maintain both by

@@ -1,18 +1,19 @@
 ---
 name: doc-inventory
 description: |
-  Pelorat — reconcile a project's documentation against reality: classify every doc
+  Seldon — reconcile a project's documentation against reality: classify every doc
   (category/status/boundary), resolve version/supersession clusters, and optionally scan
   the code to find work that's BUILT but undocumented (and docs describing unbuilt features).
   Trigger: /foundation:doc-inventory
 user-invocable: true
 ---
 
-# Pelorat — Documentation Inventory & Reconciliation
+# Seldon — Documentation Inventory & Reconciliation
 
 The first phase of organizing a sprawling project's docs. Produces a structured **manifest** that
-becomes the blueprint for `/foundation:doc-restructure`. Named for Janov Pelorat, the Foundation's
-historian who catalogs and preserves knowledge. See `PROJECT_STRUCTURE_STANDARD.md` in the plugin docs.
+becomes the blueprint for `/foundation:doc-restructure`. Named for Hari Seldon, who founded the
+Foundation to compile the Encyclopedia Galactica and preserve knowledge against forgetting. See
+`PROJECT_STRUCTURE_STANDARD.md` in the plugin docs.
 
 ## Instructions
 

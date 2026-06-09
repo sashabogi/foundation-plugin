@@ -16,7 +16,7 @@ import { homedir } from "node:os";
 import { search as gaiaSearch, getRecent as gaiaGetRecent, closeStorage } from "../src/memory/gaia.mjs";
 
 /**
- * Pelorat — walk from the project dir UP to the repo root (a `.git` boundary,
+ * Seldon — walk from the project dir UP to the repo root (a `.git` boundary,
  * max 6 levels) collecting AGENTS.md files, ordered root-first → cwd-last (the
  * DOX "specificity gradient"). Pure filesystem, never throws.
  */
@@ -115,7 +115,7 @@ try {
     }
   }
 
-  // Pelorat — hierarchical AGENTS.md context tree. Walk cwd→repo-root, surface
+  // Seldon — hierarchical AGENTS.md context tree. Walk cwd→repo-root, surface
   // the nearest chain (root-first) so path-local project rules load automatically.
   try {
     const agentsChain = collectAgentsChain(projectDir);

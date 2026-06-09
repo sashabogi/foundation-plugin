@@ -1,6 +1,6 @@
 {
   "name": "@sashabogi/foundation-plugin",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "type": "module",
   "private": true,
   "description": "Claude Code plugin wrapper for @sashabogi/foundation",

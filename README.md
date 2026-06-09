@@ -10,7 +10,7 @@
 
 ## What is Foundation?
 
-Foundation is a **Claude Code plugin** that wraps the [`@sashabogi/foundation`](https://www.npmjs.com/package/@sashabogi/foundation) npm package and gives your AI assistant persistent memory, deep codebase understanding, and automatic session lifecycle management. The plugin itself is a thin shell: it contributes hooks that fire on lifecycle events at zero token cost, skills that load instructions only when you invoke them, a local UI server, and a stable adapter to the bundled MCP server. The MCP server (shipped by the npm package) registers 39 tools across Demerzel, Seldon, and Gaia. In Claude Code 2.1+ those tools are loaded on demand via the deferred-tool system, so they cost no context until you call them.
+Foundation is a **Claude Code plugin** that wraps the [`@sashabogi/foundation`](https://www.npmjs.com/package/@sashabogi/foundation) npm package and gives your AI assistant persistent memory, deep codebase understanding, and automatic session lifecycle management. The plugin itself is a thin shell: it contributes hooks that fire on lifecycle events at zero token cost, skills that load instructions only when you invoke them, a local UI server, and a stable adapter to the bundled MCP server. The MCP server (shipped by the npm package) registers 39 tools spanning Demerzel (codebase intelligence), Gaia (local memory), and a bundled legacy orchestration layer. In Claude Code 2.1+ those tools are loaded on demand via the deferred-tool system, so they cost no context until you call them.
 
 The naming comes from Isaac Asimov's *Foundation* series. In the novels, Hari Seldon created the Foundation to preserve human knowledge through the collapse of the Galactic Empire -- a millennia-long dark age where everything would otherwise be forgotten. This plugin does the same thing for your development work: it preserves architectural decisions, codebase understanding, and project context across sessions, projects, and tools, so nothing is lost when a conversation ends or a context window resets.
 
@@ -18,7 +18,7 @@ Three core systems power the plugin:
 
 - **Demerzel** -- the codebase watcher. Named after R. Daneel Olivaw (who also went by Eto Demerzel), the 20,000-year-old robot who quietly guided humanity from the shadows. Demerzel builds structural snapshots of your codebase -- import graphs, export maps, symbol indexes -- so Claude can answer architecture questions without reading every file.
 - **Gaia** -- the local memory. Named after the planet with collective consciousness, where every organism shared a single mind. Gaia is a local SQLite + FTS5 database that connects sessions, projects, and insights through a unified knowledge graph with typed relationships.
-- **Seldon** -- the orchestrator. Named after Hari Seldon, the mathematician who created psychohistory. Seldon provides multi-agent orchestration: role-based invocation (coder, critic, reviewer), plan generation, critique, verification loops, and multi-provider LLM routing. Claude Code's native Task tool also handles parallel agents -- use Seldon when you want explicit role-based prompting, structured plans, or external provider routing. The configured providers are exposed through the `/foundation:providers` skill.
+- **Seldon** -- documentation architecture. Named after Hari Seldon, who founded the Foundation to compile the *Encyclopedia Galactica* and preserve civilization's knowledge against forgetting. Seldon keeps a project's documentation legible as it grows: three skills (`/foundation:doc-inventory`, `/foundation:doc-restructure`, `/foundation:doc-portal`) plus a SessionStart hook that auto-loads the nearest `AGENTS.md` context tree. *(Seldon was previously Foundation's multi-agent orchestrator; that role has been sunsetted -- orchestration now lives in Scrooge and Claude Code's native agents -- and the name was repurposed for the documentation pillar.)* See the Seldon section below for details.
 - **Open Brain** -- the cloud semantic memory. Built on the [OB1 (Open Brain)](https://github.com/NateBJones-Projects/OB1) architecture by Nate Jones, this optional layer adds pgvector-powered semantic search via Supabase, so you can find memories by *meaning*, not just keywords.
 
 ---
@@ -163,11 +163,11 @@ The result set includes a `source` field (`gaia` or `openbrain`) so you can see 
 
 ---
 
-### Pelorat -- Documentation Architecture
+### Seldon -- Documentation Architecture
 
-*Named for Janov Pelorat, the historian who catalogs and preserves knowledge -- and for the Foundation's founding mission to compile the Encyclopedia Galactica.*
+*Named for Hari Seldon, who founded the Foundation to compile the Encyclopedia Galactica -- the centuries-long project of preserving knowledge against the coming dark age. (Seldon was previously Foundation's multi-agent orchestrator; that role has been sunsetted -- orchestration now lives in Scrooge and Claude Code's native agents -- and the name was repurposed for the documentation pillar.)*
 
-Pelorat keeps a project's **documentation** legible as it grows. Big projects accumulate hundreds of flat markdown docs and you lose track of what was built, how, and what's still true. Pelorat fixes that in three skills, and a SessionStart hook makes it self-maintaining:
+Seldon keeps a project's **documentation** legible as it grows. Big projects accumulate hundreds of flat markdown docs and you lose track of what was built, how, and what's still true. Seldon fixes that in three skills, and a SessionStart hook makes it self-maintaining:
 
 - **`/foundation:doc-inventory`** -- classify every doc (category / status / boundary), resolve duplicate/superseded clusters, and optionally scan the code to find work that's *built but undocumented* (and docs describing features never built). Delegates the bulk to cheap models.
 - **`/foundation:doc-restructure`** -- move docs into a standard typed taxonomy (`architecture/ specs/ plans/ runbooks/ decisions/ audits/ reference/ planned/ archive/`), build a status-iconed `INDEX.md`, and author a hierarchical **`AGENTS.md` context tree** (root + one per durable boundary) so every project looks the same.
@@ -189,9 +189,9 @@ Skills are slash commands that load their instructions into context only when in
 | Handoff | `/foundation:handoff` | Create a session handoff document capturing decisions, file changes, blockers, and next steps. The next session auto-loads it. |
 | Providers | `/foundation:providers` | List and test configured LLM providers, their health status, and routing rules. |
 | Brain Stats | `/foundation:brain-stats` | Show unified memory statistics: total memories, tier breakdown, top topics, storage health. |
-| **Doc Inventory** | `/foundation:doc-inventory` | *(Pelorat)* Reconcile a project's docs vs reality — classify, resolve clusters, find undocumented work. Read-only. |
-| **Doc Restructure** | `/foundation:doc-restructure` | *(Pelorat)* Reshape docs into the standard taxonomy + build the `AGENTS.md` tree + `INDEX.md`. |
-| **Doc Portal** | `/foundation:doc-portal` | *(Pelorat)* Generate a design-system-themed HTML portal from the markdown docs, served locally. |
+| **Doc Inventory** | `/foundation:doc-inventory` | *(Seldon)* Reconcile a project's docs vs reality — classify, resolve clusters, find undocumented work. Read-only. |
+| **Doc Restructure** | `/foundation:doc-restructure` | *(Seldon)* Reshape docs into the standard taxonomy + build the `AGENTS.md` tree + `INDEX.md`. |
+| **Doc Portal** | `/foundation:doc-portal` | *(Seldon)* Generate a design-system-themed HTML portal from the markdown docs, served locally. |
 | Foundation UI | `/foundation:foundation-ui` | Launch the Foundation web dashboard at `http://localhost:3333`. |
 
 ---
@@ -202,10 +202,10 @@ Hooks fire automatically on Claude Code lifecycle events. The user never invokes
 
 | Hook | When It Fires | What It Does |
 |------|--------------|-------------|
-| **SessionStart** | When a Claude Code session begins | (1) Registers the project in `~/.foundation/projects.json` so the Foundation UI can discover it. (2) If `.foundation/snapshot.txt` exists, injects a `<foundation-context>` reminder that the Demerzel snapshot is available so Claude prefers Foundation queries over raw file reads. (3) Surfaces up to 5 recent Gaia memories (project + global tiers) inside `<foundation-memories>`. (4) Runs a cross-project keyword search using the cwd basename as an FTS5 phrase-quoted query (so hyphenated names like `stripe-auth` match literally) and surfaces up to 3 hits from other projects inside `<foundation-cross-project>`. (5) If `.foundation/handoffs/*.md` is present, loads the latest handoff document into `<foundation-handoff>`. (6) **(Pelorat)** Walks cwd→repo-root and injects the nearest `AGENTS.md` chain (root-first) into `<foundation-agents>` so path-local project rules load automatically. |
+| **SessionStart** | When a Claude Code session begins | (1) Registers the project in `~/.foundation/projects.json` so the Foundation UI can discover it. (2) If `.foundation/snapshot.txt` exists, injects a `<foundation-context>` reminder that the Demerzel snapshot is available so Claude prefers Foundation queries over raw file reads. (3) Surfaces up to 5 recent Gaia memories (project + global tiers) inside `<foundation-memories>`. (4) Runs a cross-project keyword search using the cwd basename as an FTS5 phrase-quoted query (so hyphenated names like `stripe-auth` match literally) and surfaces up to 3 hits from other projects inside `<foundation-cross-project>`. (5) If `.foundation/handoffs/*.md` is present, loads the latest handoff document into `<foundation-handoff>`. (6) **(Seldon)** Walks cwd→repo-root and injects the nearest `AGENTS.md` chain (root-first) into `<foundation-agents>` so path-local project rules load automatically. |
 | **PreToolUse** | Before any tool call | Intercepts tool invocations. Can inject additional context, suggest Foundation tools when Claude is about to read many files, and route queries through Demerzel when appropriate. |
 | **PostToolUse** | After any tool call completes | Appends a JSON line per tool invocation to a per-session log at `/tmp/foundation-session-<ppid>.jsonl`. SessionEnd consumes that log to summarize the session. |
-| **SessionEnd** | When a Claude Code session ends | Reads the per-session JSONL log written by PostToolUse, summarizes the session (duration, tools used, files touched), saves a `session`-tier checkpoint to Gaia tagged `[checkpoint, auto]`, and deletes the temp log. **(Pelorat)** Also runs a non-blocking doc-currency check: warns when code changed under an `AGENTS.md` area without that file being updated. |
+| **SessionEnd** | When a Claude Code session ends | Reads the per-session JSONL log written by PostToolUse, summarizes the session (duration, tools used, files touched), saves a `session`-tier checkpoint to Gaia tagged `[checkpoint, auto]`, and deletes the temp log. **(Seldon)** Also runs a non-blocking doc-currency check: warns when code changed under an `AGENTS.md` area without that file being updated. |
 
 All hooks read JSON from stdin, write debug logs to stderr, and output `hookSpecificOutput` JSON to stdout. They run with no network calls and no LLM invocations -- typically under 100ms; SessionStart can be a touch slower because the cross-project search hits SQLite FTS5.
 
@@ -348,16 +348,16 @@ Foundation v2 was a monolithic MCP server with 37 tools across three subsystems 
 | Tool delivery | Always loaded into context | On-demand via Claude Code 2.1+ deferred tool loading |
 | Demerzel (codebase) | 9 MCP tools | 9 MCP tools (snapshot/search/find_files/find_importers/find_symbol/get_deps/get_context/analyze/semantic_search) + `/foundation:snapshot` skill |
 | Gaia (memory) | 16 MCP tools | 18 MCP tools + 4 skills (added `gaia_ingest_transcripts`, `gaia_invalidate`) |
-| Seldon (multi-agent) | 12 MCP tools | 12 MCP tools (still shipped) + `/foundation:providers` skill |
+| Seldon | 12 multi-agent orchestration MCP tools | Orchestrator role **sunsetted** (orchestration now lives in Scrooge + Claude Code native agents); the 12 legacy tools are still bundled by the npm package for compatibility, surfaced via `/foundation:providers`. The **Seldon name now denotes the documentation-architecture pillar** (3 doc skills + AGENTS.md hooks). |
 | Session lifecycle | Manual | Automatic via SessionStart, SessionEnd, Pre/PostToolUse hooks |
 | Cross-project recall | Not included | Cross-project FTS5 keyword search injected by SessionStart |
 | Cloud memory | Not included | Open Brain integrated (adapted from OB1) |
 
-**What was kept:** Demerzel's codebase intelligence, Gaia's local memory with FTS5, Seldon's multi-agent orchestration and provider routing, the multi-project web dashboard.
+**What was kept:** Demerzel's codebase intelligence, Gaia's local memory with FTS5, the multi-project web dashboard. (Seldon's multi-agent orchestration has since been sunsetted in favor of Scrooge + native agents; its legacy tools remain bundled, and the Seldon name was repurposed for the documentation-architecture pillar.)
 
 **What was added:** Open Brain cloud semantic memory, adapted from [OB1](https://github.com/NateBJones-Projects/OB1)'s Supabase + pgvector architecture. Automatic session lifecycle via hooks. Cross-project keyword recall on SessionStart. Transcript ingestion (`gaia_ingest_transcripts`) and a temporal knowledge graph in Gaia.
 
-**What was reorganized:** In 3.0.1 the plugin was split from a monolithic in-tree implementation into a thin wrapper. The MCP server, Demerzel engine, Gaia storage, Open Brain client, and Seldon orchestrator now live in the [`@sashabogi/foundation`](https://www.npmjs.com/package/@sashabogi/foundation) npm package. The plugin only owns hooks, skills, the UI server, and a small adapter (`src/memory/gaia.mjs`) so the hooks share storage with the MCP server.
+**What was reorganized:** In 3.0.1 the plugin was split from a monolithic in-tree implementation into a thin wrapper. The MCP server, Demerzel engine, Gaia storage, Open Brain client, and the legacy Seldon orchestration tools now live in the [`@sashabogi/foundation`](https://www.npmjs.com/package/@sashabogi/foundation) npm package. The plugin only owns hooks, skills, the UI server, and a small adapter (`src/memory/gaia.mjs`) so the hooks share storage with the MCP server.
 
 **Net result:** Same 39-tool feature surface as the unified npm package, delivered through Claude Code plugin primitives that cost zero context until invoked. Hooks add automatic session lifecycle on top.
 

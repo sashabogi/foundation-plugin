@@ -15,7 +15,7 @@ import { save as gaiaSave, closeStorage } from "../src/memory/gaia.mjs";
 const CODE_EXT = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".py", ".go", ".rs", ".swift", ".sql", ".rb", ".java", ".kt"]);
 
 /**
- * Pelorat — closeout doc-currency check (non-blocking). For each changed CODE file,
+ * Seldon — closeout doc-currency check (non-blocking). For each changed CODE file,
  * find the nearest AGENTS.md walking up to the repo root; if it exists but was NOT
  * among the changed files, that area's local docs may be stale. Returns the paths.
  */
@@ -74,7 +74,7 @@ try {
     ? ((toolEvents[toolEvents.length - 1].ts - toolEvents[0].ts) / 1000 / 60).toFixed(1)
     : '0';
 
-  // Pelorat — closeout doc-currency check (non-blocking)
+  // Seldon — closeout doc-currency check (non-blocking)
   let docWarnings = [];
   try {
     docWarnings = docCurrencyWarnings(filesChanged, projectDir);

@@ -1,14 +1,14 @@
 ---
 name: doc-restructure
 description: |
-  Pelorat — restructure a project's docs into a standard taxonomy and build the hierarchical
+  Seldon — restructure a project's docs into a standard taxonomy and build the hierarchical
   AGENTS.md context tree. Moves docs into typed folders, archives superseded ones, generates an
   INDEX, and authors root + per-boundary AGENTS.md. Run /foundation:doc-inventory first.
   Trigger: /foundation:doc-restructure
 user-invocable: true
 ---
 
-# Pelorat — Documentation Restructure & AGENTS Tree
+# Seldon — Documentation Restructure & AGENTS Tree
 
 The second phase. Consumes the manifest from `/foundation:doc-inventory` and reshapes the docs into the
 standard. Do it as ONE reviewable git commit (renames preserve history). See `PROJECT_STRUCTURE_STANDARD.md`.
