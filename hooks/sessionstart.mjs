@@ -11,9 +11,30 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { search as gaiaSearch, getRecent as gaiaGetRecent, closeStorage } from "../src/memory/gaia.mjs";
+
+/**
+ * Pelorat — walk from the project dir UP to the repo root (a `.git` boundary,
+ * max 6 levels) collecting AGENTS.md files, ordered root-first → cwd-last (the
+ * DOX "specificity gradient"). Pure filesystem, never throws.
+ */
+function collectAgentsChain(startDir) {
+  const chain = [];
+  try {
+    let dir = startDir;
+    for (let i = 0; i < 6; i++) {
+      const f = join(dir, "AGENTS.md");
+      if (existsSync(f)) chain.push(f);
+      if (existsSync(join(dir, ".git"))) break;
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  } catch { /* ignore */ }
+  return chain.reverse();
+}
 
 // --- Project registration (keeps ~/.foundation/projects.json in sync for UI) ---
 const CONFIG_DIR = join(homedir(), '.foundation');
@@ -92,6 +113,30 @@ try {
     } catch {
       // Snapshot exists but unreadable — skip
     }
+  }
+
+  // Pelorat — hierarchical AGENTS.md context tree. Walk cwd→repo-root, surface
+  // the nearest chain (root-first) so path-local project rules load automatically.
+  try {
+    const agentsChain = collectAgentsChain(projectDir);
+    if (agentsChain.length > 0) {
+      const PER_FILE = 8000, TOTAL = 24000;
+      let used = 0;
+      additionalContext += `<foundation-agents project="${projectDir}">\n`;
+      additionalContext += `Hierarchical AGENTS.md rules for this path (root-first → most-specific last). These are project law — follow them; a deeper file specializes but never weakens a global non-negotiable.\n`;
+      for (const f of agentsChain) {
+        if (used >= TOTAL) { additionalContext += `<!-- additional AGENTS.md omitted (budget) -->\n`; break; }
+        try {
+          let body = readFileSync(f, "utf-8");
+          if (body.length > PER_FILE) body = body.slice(0, PER_FILE) + `\n<!-- truncated; read ${f} in full -->\n`;
+          used += body.length;
+          additionalContext += `\n### ${f}\n${body}\n`;
+        } catch { /* unreadable — skip */ }
+      }
+      additionalContext += `</foundation-agents>\n`;
+    }
+  } catch (err) {
+    process.stderr.write(`[foundation] AGENTS walk failed: ${err?.message}\n`);
   }
 
   // Load recent project memories from Gaia

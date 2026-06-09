@@ -163,6 +163,20 @@ The result set includes a `source` field (`gaia` or `openbrain`) so you can see 
 
 ---
 
+### Pelorat -- Documentation Architecture
+
+*Named for Janov Pelorat, the historian who catalogs and preserves knowledge -- and for the Foundation's founding mission to compile the Encyclopedia Galactica.*
+
+Pelorat keeps a project's **documentation** legible as it grows. Big projects accumulate hundreds of flat markdown docs and you lose track of what was built, how, and what's still true. Pelorat fixes that in three skills, and a SessionStart hook makes it self-maintaining:
+
+- **`/foundation:doc-inventory`** -- classify every doc (category / status / boundary), resolve duplicate/superseded clusters, and optionally scan the code to find work that's *built but undocumented* (and docs describing features never built). Delegates the bulk to cheap models.
+- **`/foundation:doc-restructure`** -- move docs into a standard typed taxonomy (`architecture/ specs/ plans/ runbooks/ decisions/ audits/ reference/ planned/ archive/`), build a status-iconed `INDEX.md`, and author a hierarchical **`AGENTS.md` context tree** (root + one per durable boundary) so every project looks the same.
+- **`/foundation:doc-portal`** -- generate a browsable, design-system-themed HTML portal *from* the markdown. Markdown stays the single source of truth; the HTML is generated, never hand-maintained twice.
+
+The **AGENTS.md tree** is the payoff: the SessionStart hook walks cwd→repo-root and auto-injects the nearest `AGENTS.md` chain (root-first), so path-local project rules load automatically; the SessionEnd hook warns when code changed under an `AGENTS.md` area that wasn't updated. The standard is documented in `docs/PROJECT_STRUCTURE_STANDARD.md`.
+
+---
+
 ## Skills Reference
 
 Skills are slash commands that load their instructions into context only when invoked. They consume **zero tokens** when not in use.
@@ -175,6 +189,9 @@ Skills are slash commands that load their instructions into context only when in
 | Handoff | `/foundation:handoff` | Create a session handoff document capturing decisions, file changes, blockers, and next steps. The next session auto-loads it. |
 | Providers | `/foundation:providers` | List and test configured LLM providers, their health status, and routing rules. |
 | Brain Stats | `/foundation:brain-stats` | Show unified memory statistics: total memories, tier breakdown, top topics, storage health. |
+| **Doc Inventory** | `/foundation:doc-inventory` | *(Pelorat)* Reconcile a project's docs vs reality — classify, resolve clusters, find undocumented work. Read-only. |
+| **Doc Restructure** | `/foundation:doc-restructure` | *(Pelorat)* Reshape docs into the standard taxonomy + build the `AGENTS.md` tree + `INDEX.md`. |
+| **Doc Portal** | `/foundation:doc-portal` | *(Pelorat)* Generate a design-system-themed HTML portal from the markdown docs, served locally. |
 | Foundation UI | `/foundation:foundation-ui` | Launch the Foundation web dashboard at `http://localhost:3333`. |
 
 ---
@@ -185,10 +202,10 @@ Hooks fire automatically on Claude Code lifecycle events. The user never invokes
 
 | Hook | When It Fires | What It Does |
 |------|--------------|-------------|
-| **SessionStart** | When a Claude Code session begins | (1) Registers the project in `~/.foundation/projects.json` so the Foundation UI can discover it. (2) If `.foundation/snapshot.txt` exists, injects a `<foundation-context>` reminder that the Demerzel snapshot is available so Claude prefers Foundation queries over raw file reads. (3) Surfaces up to 5 recent Gaia memories (project + global tiers) inside `<foundation-memories>`. (4) Runs a cross-project keyword search using the cwd basename as an FTS5 phrase-quoted query (so hyphenated names like `stripe-auth` match literally) and surfaces up to 3 hits from other projects inside `<foundation-cross-project>`. (5) If `.foundation/handoffs/*.md` is present, loads the latest handoff document into `<foundation-handoff>`. |
+| **SessionStart** | When a Claude Code session begins | (1) Registers the project in `~/.foundation/projects.json` so the Foundation UI can discover it. (2) If `.foundation/snapshot.txt` exists, injects a `<foundation-context>` reminder that the Demerzel snapshot is available so Claude prefers Foundation queries over raw file reads. (3) Surfaces up to 5 recent Gaia memories (project + global tiers) inside `<foundation-memories>`. (4) Runs a cross-project keyword search using the cwd basename as an FTS5 phrase-quoted query (so hyphenated names like `stripe-auth` match literally) and surfaces up to 3 hits from other projects inside `<foundation-cross-project>`. (5) If `.foundation/handoffs/*.md` is present, loads the latest handoff document into `<foundation-handoff>`. (6) **(Pelorat)** Walks cwd→repo-root and injects the nearest `AGENTS.md` chain (root-first) into `<foundation-agents>` so path-local project rules load automatically. |
 | **PreToolUse** | Before any tool call | Intercepts tool invocations. Can inject additional context, suggest Foundation tools when Claude is about to read many files, and route queries through Demerzel when appropriate. |
 | **PostToolUse** | After any tool call completes | Appends a JSON line per tool invocation to a per-session log at `/tmp/foundation-session-<ppid>.jsonl`. SessionEnd consumes that log to summarize the session. |
-| **SessionEnd** | When a Claude Code session ends | Reads the per-session JSONL log written by PostToolUse, summarizes the session (duration, tools used, files touched), saves a `session`-tier checkpoint to Gaia tagged `[checkpoint, auto]`, and deletes the temp log. |
+| **SessionEnd** | When a Claude Code session ends | Reads the per-session JSONL log written by PostToolUse, summarizes the session (duration, tools used, files touched), saves a `session`-tier checkpoint to Gaia tagged `[checkpoint, auto]`, and deletes the temp log. **(Pelorat)** Also runs a non-blocking doc-currency check: warns when code changed under an `AGENTS.md` area without that file being updated. |
 
 All hooks read JSON from stdin, write debug logs to stderr, and output `hookSpecificOutput` JSON to stdout. They run with no network calls and no LLM invocations -- typically under 100ms; SessionStart can be a touch slower because the cross-project search hits SQLite FTS5.
 
