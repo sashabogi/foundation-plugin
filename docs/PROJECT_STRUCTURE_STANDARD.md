@@ -1,28 +1,32 @@
-# Project Structure Standard & Documentation Refactor Plan
+# Project Structure Standard
 
-> Status: PLAN (approved decisions, not yet executed) · Created 2026-06-08
-> Origin: adapted from the DOX hierarchical-docs pattern + the harness analysis
-> (see HARNESS_IMPROVEMENT_ANALYSIS.md). Pilot target: `/Users/sashabogojevic/development/crebral`.
+> The documentation-architecture standard that the Foundation **Seldon** skills
+> (`/foundation:doc-inventory`, `/foundation:doc-restructure`, `/foundation:doc-portal`)
+> reshape a project toward. Adapted from the hierarchical-`AGENTS.md` ("DOX") pattern.
 
 ## Why
-Crebral alone has **157 markdown docs (98 dumped flat in `docs/`)** with no taxonomy, plus 13
-tied-together sibling repos (legal, pilot-v2, desktop-lite, ios, gateway, fleet, builtbetter…).
-Result: impossible to discern *what was built and how*. We standardize so every project looks the
-same, old projects get cleaned up, and a human-readable ecosystem portal makes it all legible.
+
+Large projects accumulate hundreds of flat markdown docs with no taxonomy. The result is
+that it becomes impossible to tell *what was built and how*, or which docs are still true.
+This standard makes every project look the same, lets old docs be cleaned up safely, and
+makes the whole thing legible to both agents and humans.
 
 ## The three documentation tiers (the core mental model)
+
 | Tier | Format | Audience | Maintained |
 |---|---|---|---|
-| **1. Agent context** | `AGENTS.md` + thin `CLAUDE.md` | the agent | hand · markdown · hook-walked by cwd · Gaia-indexed |
-| **2. Source-of-truth docs** | `.md` / `.mdx` in taxonomy | agent + human (git) | hand · diffable |
+| **1. Agent context** | `AGENTS.md` + thin `CLAUDE.md` | the agent | hand · markdown · hook-walked by cwd · memory-indexed |
+| **2. Source-of-truth docs** | `.md` / `.mdx` in a taxonomy | agent + human (git) | hand · diffable |
 | **3. Presentation portal** | generated **HTML** (design-system styled, served) | human (browser) | **build step from tier 2 — never hand-maintained twice** |
 
-**The inviolable rule:** markdown is the single source of truth; HTML is *generated*. No doc is ever
-hand-maintained as both `.md` and `.html`. That drift is the exact sprawl we are eliminating.
+**The inviolable rule:** markdown is the single source of truth; HTML is *generated*. No doc
+is ever hand-maintained as both `.md` and `.html`. That drift is the exact sprawl this
+standard eliminates.
 
 ---
 
 ## A. Canonical project layout (every repo adopts this)
+
 ```
 <project>/
   AGENTS.md            # REAL: project-wide rules + Child Index (pointers to child AGENTS.md)
@@ -31,7 +35,7 @@ hand-maintained as both `.md` and `.html`. That drift is the exact sprawl we are
   CHANGELOG.md
   docs/
     INDEX.md           # catalog of every doc, categorized + tagged (the human map)
-    architecture/      # how the system works (system/gateway/frontend/backend design)
+    architecture/      # how the system works (system/service/frontend/backend design)
     specs/             # product & feature specs
     plans/             # implementation / migration / rollout plans
     runbooks/          # operational: deploy, security, infra, incident procedures
@@ -49,66 +53,43 @@ hand-maintained as both `.md` and `.html`. That drift is the exact sprawl we are
 - Dated artifacts (audits): suffix ISO date — `design-token-audit-2026-05-14.md`.
 - One concept = one doc. Superseding a doc → move the old one to `archive/`, link forward.
 
-## B. The AGENTS.md hierarchy (adapted DOX, hook-enforced not faith-based)
-- **Root `AGENTS.md`** = project-wide rules + a **Child Index** listing every child `AGENTS.md` and
-  what it governs (so the tree is traversable without scanning the filesystem).
-- **Child `AGENTS.md`** = only the *local* rules for that area (the gateway env-var gotcha lives in
-  `services/gateway/AGENTS.md`, not the root).
-- **Specificity gradient:** broad at root, concrete at leaves. A session loads only the root→cwd chain.
-- **Inviolable floor (harness #3):** a child may add/specialize but **may NOT weaken** a global
-  non-negotiable (security rules, Definition-of-Done, absolute-paths). Floor lives in `~/.claude/CLAUDE.md`.
-- **Closeout (harness #6):** after a structural change, the touched area's `AGENTS.md` is updated;
-  the DoD gate warns if structure changed but its `AGENTS.md`/docs didn't.
-- **Automated, not manual:** the Foundation SessionStart hook reads `cwd`, walks root→cwd, injects the
-  nearest `AGENTS.md` chain, and dual-writes each to Gaia (tier=project) so they're FTS5/semantic-
-  searchable. This is harness improvement #1 — it unifies the parallel MEMORY.md ↔ Gaia stores.
+## B. The AGENTS.md hierarchy (hook-enforced, not faith-based)
 
-## C. The unified ecosystem portal (tier 3)
-- A single app (`~/development/crebral-ecosystem-portal/`) that ingests each repo's `docs/` taxonomy
-  as content, renders MDX/markdown to **designed HTML** using the **Crebral design system**
-  (`crebral/design-system/tokens.css` + brand tokens — teal/amber, Sora/DM Sans/JetBrains Mono).
-- Served like `foundation ui` (a local port via `portless`), constantly rebuilt as docs change.
-- Sections: **Ecosystem overview + interconnection map** (how the 14 repos tie together) · per-project
-  area (Crebral, Legal, Pilot v2, Desktop Lite, iOS, Gateway, Fleet, BuiltBetter…) · **feature
-  inventory** (what's built, where) · architecture diagrams (real components, not ASCII wireframes).
-- Front-door/overview pages authored in **MDX** (hand-designed, real components); deep specs are plain
-  markdown that renders in. Build tool TBD in Phase 3 (Astro content-collections vs Next+MDX — Astro
-  fits docs better; Next eases direct design-system component reuse).
+- **Root `AGENTS.md`** = project-wide rules + a **Child Index** listing every child `AGENTS.md`
+  and what it governs (so the tree is traversable without scanning the filesystem).
+- **Child `AGENTS.md`** = only the *local* rules for that area (e.g. a gateway env-var gotcha
+  lives in `services/gateway/AGENTS.md`, not the root).
+- **Specificity gradient:** broad at the root, concrete at the leaves. A session loads only the
+  root→cwd chain.
+- **Inviolable floor:** a child may add/specialize but **may NOT weaken** a global non-negotiable
+  (security rules, Definition-of-Done, absolute-paths). The floor lives in `~/.claude/CLAUDE.md`.
+- **Closeout:** after a structural change, the touched area's `AGENTS.md` is updated; the SessionEnd
+  hook warns if code changed under an `AGENTS.md` area but that file wasn't.
+- **Automated, not manual:** the Foundation SessionStart hook reads `cwd`, walks root→cwd, and
+  injects the nearest `AGENTS.md` chain into a `<foundation-agents>` context block — so path-local
+  rules load automatically without a faith-based "remember to re-walk" instruction.
+
+## C. The presentation portal (tier 3, optional)
+
+- A generator reads each project's `docs/` taxonomy as content and renders markdown/MDX to
+  **designed HTML** styled with the project's own design system, served locally (e.g. via a
+  local port) and rebuilt as docs change.
+- Front-door / overview pages are authored in **MDX** (hand-designed, real components); deep specs
+  are plain markdown that renders in.
+- Markdown remains the single source of truth; the portal is generated, never hand-maintained twice.
+  `/foundation:doc-portal` produces this from the markdown.
 
 ---
 
-## Implementation plan (phased)
+## Suggested rollout (per project)
 
-### Phase 0 — Inventory & classify (Crebral) — *do first, low risk, read-only*
-Fan out agents to read all 157 Crebral docs and produce a manifest: for each doc → category
-(architecture/spec/plan/runbook/decision/audit/reference), status (LIVE / STALE / SUPERSEDED-BY-X),
-the durable boundary it belongs to, and proposed new kebab path. Output = a classification table that
-drives every later move. No files touched yet.
+1. **Inventory & classify** (`/foundation:doc-inventory`) — read every doc, produce a manifest:
+   category (architecture/spec/plan/runbook/decision/audit/reference), status (LIVE / STALE /
+   SUPERSEDED-BY-X), the durable boundary it belongs to, and a proposed kebab path. No files moved yet.
+2. **Restructure** (`/foundation:doc-restructure`) — create the taxonomy folders; move LIVE docs in
+   (kebab-renamed); move STALE/SUPERSEDED to `archive/` with forward-links; rewrite cross-links;
+   generate `docs/INDEX.md`; author the root + per-boundary `AGENTS.md` tree.
+3. **Portal** (`/foundation:doc-portal`) — generate the browsable HTML portal from the markdown.
 
-### Phase 1 — Restructure Crebral docs (hybrid cleanup)
-Create the `docs/` taxonomy folders; move LIVE docs into them (kebab-renamed); move STALE/SUPERSEDED to
-`docs/archive/` with forward-links; rewrite internal cross-links; generate `docs/INDEX.md`. Commit.
-
-### Phase 2 — Author the AGENTS.md tree (Crebral)
-Write the root `AGENTS.md` (rules + Child Index) + shrink `CLAUDE.md` to a pointer; author child
-`AGENTS.md` at the real boundaries (`services/`, `services/gateway/`, `src/`, `workers/`, `supabase/`,
-`design-system/`) — seeding each from existing scattered CLAUDE.md content + Gaia gotcha memories.
-
-### Phase 3 — Stand up the ecosystem portal (Crebral section first)
-Scaffold `crebral-ecosystem-portal`, wire it to read Crebral's new `docs/` taxonomy, style with the
-design system, serve via portless. Hand-build the ecosystem overview + interconnection map. Verify it
-renders the real docs.
-
-### Phase 4 — Harness enforcement (the three rule-keepers)
-Implement harness #1 (SessionStart AGENTS.md cwd-walk + Gaia dual-write), #3 (inviolable-floor guard),
-#6 (Closeout doc-currency warning in verify-done-gate.py). This is what keeps the structure from rotting.
-
-### Phase 5 — Extract template + rules, then propagate
-Freeze the Crebral result into a reusable **template** (skeleton dirs + AGENTS.md stubs + portal
-adapter) and a short **STRUCTURE_RULES** checklist. Apply to the family in waves (legal, pilot-v2,
-ios, desktop-lite, gateway, fleet, builtbetter.ai…), each adding its section to the unified portal.
-
-## Sequencing note
-Phase 0 is pure read-only recon and should run before anything is moved. Phases 1–2 are the big
-mechanical cleanup (parallelizable via agents). Phase 4 can run in parallel with 3. Do NOT mass-move
-files (Phase 1) across all 14 repos before the Crebral pilot proves the taxonomy (Phase 5 gate).
+Inventory is pure read-only recon and should run before anything is moved. Prove the taxonomy on one
+project before propagating the template across a family of related repos.
