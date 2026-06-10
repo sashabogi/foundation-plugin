@@ -10,7 +10,7 @@
 
 ## What is Foundation?
 
-Foundation is a **Claude Code plugin** that wraps the [`@sashabogi/foundation`](https://www.npmjs.com/package/@sashabogi/foundation) npm package and gives your AI assistant persistent memory, deep codebase understanding, and automatic session lifecycle management. The plugin itself is a thin shell: it contributes hooks that fire on lifecycle events at zero token cost, skills that load instructions only when you invoke them, a local UI server, and a stable adapter to the bundled MCP server. The MCP server (shipped by the npm package) registers 39 tools spanning Demerzel (codebase intelligence), Gaia (local memory), and a bundled legacy orchestration layer. In Claude Code 2.1+ those tools are loaded on demand via the deferred-tool system, so they cost no context until you call them.
+Foundation is a **Claude Code plugin** that wraps the [`@sashabogi/foundation`](https://www.npmjs.com/package/@sashabogi/foundation) npm package and gives your AI assistant persistent memory, deep codebase understanding, and automatic session lifecycle management. The plugin itself is a thin shell: it contributes hooks that fire on lifecycle events at zero token cost, skills that load instructions only when you invoke them, a local UI server, and a stable adapter to the bundled MCP server. The MCP server (shipped by the npm package) registers 29 tools spanning Demerzel (codebase intelligence), Gaia (local memory), and a small provider registry (`provider_list` / `provider_test`). In Claude Code 2.1+ those tools are loaded on demand via the deferred-tool system, so they cost no context until you call them.
 
 The naming comes from Isaac Asimov's *Foundation* series. In the novels, Hari Seldon created the Foundation to preserve human knowledge through the collapse of the Galactic Empire -- a millennia-long dark age where everything would otherwise be forgotten. This plugin does the same thing for your development work: it preserves architectural decisions, codebase understanding, and project context across sessions, projects, and tools, so nothing is lost when a conversation ends or a context window resets.
 
@@ -348,18 +348,18 @@ Foundation v2 was a monolithic MCP server with 37 tools across three subsystems 
 | Tool delivery | Always loaded into context | On-demand via Claude Code 2.1+ deferred tool loading |
 | Demerzel (codebase) | 9 MCP tools | 9 MCP tools (snapshot/search/find_files/find_importers/find_symbol/get_deps/get_context/analyze/semantic_search) + `/foundation:snapshot` skill |
 | Gaia (memory) | 16 MCP tools | 18 MCP tools + 4 skills (added `gaia_ingest_transcripts`, `gaia_invalidate`) |
-| Seldon | 12 multi-agent orchestration MCP tools | Orchestrator role **sunsetted** (orchestration now lives in Scrooge + Claude Code native agents); the 12 legacy tools are still bundled by the npm package for compatibility, surfaced via `/foundation:providers`. The **Seldon name now denotes the documentation-architecture pillar** (3 doc skills + AGENTS.md hooks). |
+| Seldon | 12 multi-agent orchestration MCP tools | **Removed in `@sashabogi/foundation` 4.0** — orchestration now lives in Scrooge + Claude Code native agents. The 2 working provider-health tools were rehomed as `provider_list` / `provider_test` (surfaced via `/foundation:providers`); the other 10 (5 of them unfinished stubs) are gone. The **Seldon name now denotes the documentation-architecture pillar** (3 doc skills + AGENTS.md hooks). |
 | Session lifecycle | Manual | Automatic via SessionStart, SessionEnd, Pre/PostToolUse hooks |
 | Cross-project recall | Not included | Cross-project FTS5 keyword search injected by SessionStart |
 | Cloud memory | Not included | Open Brain integrated (adapted from OB1) |
 
-**What was kept:** Demerzel's codebase intelligence, Gaia's local memory with FTS5, the multi-project web dashboard. (Seldon's multi-agent orchestration has since been sunsetted in favor of Scrooge + native agents; its legacy tools remain bundled, and the Seldon name was repurposed for the documentation-architecture pillar.)
+**What was kept:** Demerzel's codebase intelligence, Gaia's local memory with FTS5, the multi-project web dashboard. (Seldon's multi-agent orchestration was sunsetted in favor of Scrooge + native agents and **removed in the 4.0 package**; its two provider-health tools were rehomed as `provider_*`, and the Seldon name was repurposed for the documentation-architecture pillar.)
 
 **What was added:** Open Brain cloud semantic memory, adapted from [OB1](https://github.com/NateBJones-Projects/OB1)'s Supabase + pgvector architecture. Automatic session lifecycle via hooks. Cross-project keyword recall on SessionStart. Transcript ingestion (`gaia_ingest_transcripts`) and a temporal knowledge graph in Gaia.
 
-**What was reorganized:** In 3.0.1 the plugin was split from a monolithic in-tree implementation into a thin wrapper. The MCP server, Demerzel engine, Gaia storage, Open Brain client, and the legacy Seldon orchestration tools now live in the [`@sashabogi/foundation`](https://www.npmjs.com/package/@sashabogi/foundation) npm package. The plugin only owns hooks, skills, the UI server, and a small adapter (`src/memory/gaia.mjs`) so the hooks share storage with the MCP server.
+**What was reorganized:** In 3.0.1 the plugin was split from a monolithic in-tree implementation into a thin wrapper. The MCP server, Demerzel engine, Gaia storage, and Open Brain client now live in the [`@sashabogi/foundation`](https://www.npmjs.com/package/@sashabogi/foundation) npm package (the Seldon orchestration tools that also lived there were removed in 4.0). The plugin only owns hooks, skills, the UI server, and a small adapter (`src/memory/gaia.mjs`) so the hooks share storage with the MCP server.
 
-**Net result:** Same 39-tool feature surface as the unified npm package, delivered through Claude Code plugin primitives that cost zero context until invoked. Hooks add automatic session lifecycle on top.
+**Net result:** The same 29-tool feature surface as the unified npm package (Demerzel 9 + Gaia 18 + Provider 2), delivered through Claude Code plugin primitives that cost zero context until invoked. Hooks add automatic session lifecycle on top.
 
 ---
 
