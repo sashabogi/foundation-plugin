@@ -43,6 +43,7 @@ export function getRecent(options = {}) {
   return getStorage().getRecent({
     tiers: options.tiers,
     limit: options.limit,
+    project_path: options.project_path,
   });
 }
 
